@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Message as MessageType, Sender, GenerationMode } from '../types';
 import { Message } from './Message';
@@ -18,8 +17,12 @@ interface ChatWindowProps {
 export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onSendMessage, isAiTyping, generationMode, setGenerationMode, onShowToast, t }) => {
   const [inputText, setInputText] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const isMobile = window.innerWidth < 640;
 
   const getPlaceholder = () => {
     switch(generationMode) {
@@ -43,6 +46,20 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onSendMessage,
     }
   }, [generationMode]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
@@ -53,6 +70,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onSendMessage,
         }
         setFile(selectedFile);
         setGenerationMode('chat'); // Force back to chat mode for analysis
+        setShowDropdown(false);
     }
   };
 
@@ -85,8 +103,26 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onSendMessage,
   const showFileInput = generationMode === 'chat';
 
   return (
-    <div className="flex-1 flex flex-col p-4 bg-zinc-950 overflow-hidden">
-      <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+    <div className={`flex-1 flex flex-col ${isMobile ? 'p-0 bg-zinc-800' : 'p-4 bg-zinc-950'} overflow-hidden`}>
+      <div 
+        className={`flex-1 ${isMobile ? 'pr-0 chat-messages' : 'pr-2'} space-y-6 ${isMobile ? 'p-4' : ''}`} 
+        style={{ 
+          overflowY: 'auto',
+          scrollbarWidth: isMobile ? 'none' : 'auto',
+          msOverflowStyle: isMobile ? 'none' : 'auto'
+        }}
+      >
+        {/* Hide scrollbar on mobile */}
+        {isMobile && (
+          <style dangerouslySetInnerHTML={{
+            __html: `
+              .chat-messages::-webkit-scrollbar {
+                display: none;
+              }
+            `
+          }} />
+        )}
+        
         {messages.map((msg) => (
           <Message key={msg.id} message={msg} onShowToast={onShowToast} t={t} />
         ))}
@@ -95,9 +131,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onSendMessage,
         )}
         <div ref={messagesEndRef} />
       </div>
-      <div className="mt-4 pt-4 border-t border-zinc-800">
+      
+      <div className={`${isMobile ? 'p-4' : 'mt-4 pt-4'} ${isMobile ? '' : 'border-t border-zinc-800'}`}>
         <form onSubmit={handleSubmit} className="relative">
-          <div className="bg-zinc-800 rounded-lg">
+          <div className={`${isMobile ? 'bg-zinc-700' : 'bg-zinc-800'} rounded-lg`}>
             <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -108,56 +145,150 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onSendMessage,
                 }
               }}
               placeholder={getPlaceholder()}
-              className="w-full bg-transparent text-zinc-200 rounded-lg p-3 pr-14 resize-none focus:outline-none"
-              rows={2}
+              className={`w-full bg-transparent text-zinc-200 rounded-lg p-3 ${isMobile ? 'pr-10' : 'pr-14'} resize-none focus:outline-none`}
+              rows={isMobile ? 1 : 2}
+              style={{
+                maxHeight: isMobile ? '40px' : 'auto',
+                overflow: 'hidden'
+              }}
             />
-            <div className="flex items-center justify-between p-3 border-t border-zinc-700/60">
-                <div className="flex items-center gap-1">
-                    {showFileInput && (
-                        <>
+            
+            <div className={`flex items-center justify-between p-3 ${isMobile ? '' : 'border-t border-zinc-700/60'}`}>
+              {isMobile ? (
+                // Mobile: Dropdown menu for buttons
+                <div className="flex items-center gap-2 relative" ref={dropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowDropdown(!showDropdown)}
+                    className="p-2 text-zinc-400 hover:text-zinc-100 transition-colors bg-zinc-600 rounded-full"
+                    aria-label="Options"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </button>
+                  
+                  {file && (
+                    <div className="flex items-center gap-2 bg-zinc-600 pl-2 pr-1 py-1 rounded-md max-w-[120px] animate-in fade-in duration-300">
+                      <span className="text-xs text-zinc-300 truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveFile}
+                        className="text-zinc-400 hover:text-zinc-100 shrink-0"
+                        aria-label={t('removeFile')}
+                      >
+                        <XIcon className="w-3 h-3"/>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Dropdown Menu */}
+                  {showDropdown && (
+                    <div className="absolute bottom-full left-0 mb-2 bg-zinc-700 rounded-lg shadow-lg border border-zinc-600 min-w-[200px] z-50">
+                      <div className="p-2">
+                        {/* File Attachment Option */}
+                        {showFileInput && (
+                          <>
                             <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleFileChange}
-                            className="hidden"
-                            accept="image/*"
+                              type="file"
+                              ref={fileInputRef}
+                              onChange={handleFileChange}
+                              className="hidden"
+                              accept="image/*"
                             />
                             <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="p-2 text-zinc-400 hover:text-zinc-100 transition-colors"
-                            aria-label={t('attachFile')}
+                              type="button"
+                              onClick={() => {
+                                fileInputRef.current?.click();
+                                setShowDropdown(false);
+                              }}
+                              className="w-full flex items-center gap-2 p-2 text-zinc-300 hover:bg-zinc-600 rounded transition-colors"
                             >
-                            <PaperclipIcon className="w-5 h-5" />
+                              <PaperclipIcon className="w-4 h-4" />
+                              <span className="text-sm">{t('attachFile')}</span>
                             </button>
-                            {file && (
-                            <div className="flex items-center gap-2 bg-zinc-700 pl-2 pr-1 py-1 rounded-md max-w-[120px] animate-in fade-in duration-300">
-                                <span className="text-xs text-zinc-300 truncate">{file.name}</span>
-                                <button
-                                    type="button"
-                                    onClick={handleRemoveFile}
-                                    className="text-zinc-400 hover:text-zinc-100 shrink-0"
-                                    aria-label={t('removeFile')}
-                                >
-                                    <XIcon className="w-4 h-4"/>
-                                </button>
-                            </div>
-                            )}
-                        </>
-                    )}
-                    <GenerationModeSelector
-                        currentMode={generationMode}
-                        onModeChange={setGenerationMode}
-                        t={t}
-                    />
+                          </>
+                        )}
+                        
+                        {/* Generation Mode Selector */}
+                        <div className="border-t border-zinc-600 mt-2 pt-2">
+                          <div className="text-xs text-zinc-400 mb-2 px-2">Generation Mode</div>
+                          <div className="space-y-1">
+                            {(['chat', 'image', 'slides'] as GenerationMode[]).map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => {
+                                  setGenerationMode(mode);
+                                  setShowDropdown(false);
+                                }}
+                                className={`w-full text-left p-2 text-sm rounded transition-colors ${
+                                  generationMode === mode 
+                                    ? 'bg-zinc-600 text-zinc-100' 
+                                    : 'text-zinc-300 hover:bg-zinc-600'
+                                }`}
+                              >
+                                {mode === 'chat' && '💬 Chat'}
+                                {mode === 'image' && '🖼️ Image'}
+                                {mode === 'slides' && '📊 Slides'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                 <button
-                    type="submit"
-                    className="bg-zinc-200 hover:bg-zinc-300 text-zinc-900 rounded-full p-2 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors"
-                    disabled={(!inputText.trim() && !file) || isAiTyping}
-                >
-                    <SendIcon className="w-5 h-5" />
-                </button>
+              ) : (
+                // Desktop: Original layout
+                <div className="flex items-center gap-1">
+                  {showFileInput && (
+                    <>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        className="hidden"
+                        accept="image/*"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-2 text-zinc-400 hover:text-zinc-100 transition-colors"
+                        aria-label={t('attachFile')}
+                      >
+                        <PaperclipIcon className="w-5 h-5" />
+                      </button>
+                      {file && (
+                        <div className="flex items-center gap-2 bg-zinc-700 pl-2 pr-1 py-1 rounded-md max-w-[120px] animate-in fade-in duration-300">
+                          <span className="text-xs text-zinc-300 truncate">{file.name}</span>
+                          <button
+                            type="button"
+                            onClick={handleRemoveFile}
+                            className="text-zinc-400 hover:text-zinc-100 shrink-0"
+                            aria-label={t('removeFile')}
+                          >
+                            <XIcon className="w-4 h-4"/>
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <GenerationModeSelector
+                    currentMode={generationMode}
+                    onModeChange={setGenerationMode}
+                    t={t}
+                  />
+                </div>
+              )}
+              
+              <button
+                type="submit"
+                className="bg-zinc-200 hover:bg-zinc-300 text-zinc-900 rounded-full p-2 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors"
+                disabled={(!inputText.trim() && !file) || isAiTyping}
+              >
+                <SendIcon className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </form>
