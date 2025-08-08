@@ -1,4 +1,5 @@
 import { Chat } from '@google/genai';
+import { User } from 'firebase/auth';
 
 export enum Sender {
   USER = 'USER',
@@ -23,4 +24,14 @@ export interface ChatSession {
   messages: Message[];
   geminiChat: Chat;
   language: Language;
+  userId?: string;
+}
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  createdAt: Date;
+  lastLoginAt: Date;
 }
